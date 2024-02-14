@@ -1,0 +1,153 @@
+import ipywidgets as widgets
+from IPython.display import display, clear_output
+import json
+import logging
+import openai
+import matplotlib.pyplot as plt
+import numpy as np
+from datetime import datetime
+
+class WorkoutRoutineGenerator:
+    def __init__(self):
+        # Initialize the OpenAI client with your API key
+        openai.api_key=("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")
+        self.user_data = {}
+        self.response_output = widgets.Output()
+        # Rest of your initialization code...
+
+        self.response_output = widgets.Output()
+        self.user_history = []
+        logging.basicConfig(filename='workout_generator.log', level=logging.INFO)
+
+    def display_user_interface(self):
+        # Create and configure widgets for user input
+        name_widget = widgets.Text(description='Name:', placeholder='Enter Your Name')
+        sport_widget = widgets.Dropdown(description='Sport:', options=['Football', 'Basketball', 'Tennis', 'Swimming', 'Running', 'Cycling', 'Other'], placeholder='Select Sport')
+        level_widget = widgets.IntSlider(description='Skill Level:', min=1, max=10, value=5, style={'description_width': 'initial'})
+        goals_widget = widgets.Textarea(description='Goal:', placeholder='Describe Your Goal')
+        submit_button = widgets.Button(description='Submit', button_style='success')
+        load_button = widgets.Button(description='Load Data', button_style='info')
+        save_button = widgets.Button(description='Save Data', button_style='warning')
+        plot_button = widgets.Button(description='Plot User History', button_style='primary')
+
+        # Tooltips for widgets
+        name_widget.tooltip = "Enter your full name"
+        sport_widget.tooltip = "Select your primary sport"
+        level_widget.tooltip = "Rate your skill level on a scale of 1 to 10"
+        goals_widget.tooltip = "What are your training goals?"
+
+        # Display widgets in the interface
+        display(name_widget, sport_widget, level_widget, goals_widget, submit_button, load_button, save_button, plot_button, self.response_output)
+
+        # Define button click events
+        submit_button.on_click(lambda b: self.on_submit_button_clicked(name_widget, sport_widget, level_widget, goals_widget))
+        load_button.on_click(self.on_load_button_clicked)
+        save_button.on_click(lambda b: self.on_save_button_clicked(self.user_data))
+        plot_button.on_click(lambda b: self.plot_user_activity())
+
+    def validate_user_data(self, user_data):
+        # Validate user inputs before processing
+        if not user_data['name'] or not user_data['sport'] or not user_data['goals']:
+            logging.warning('Invalid input detected.')
+            return False
+        return True
+
+    def on_submit_button_clicked(self, name_widget, sport_widget, level_widget, goals_widget):
+        # Collect and validate user data from widgets
+        self.user_data = {
+            'name': name_widget.value.strip(),
+            'sport': sport_widget.value,
+            'level': level_widget.value,
+            'goals': goals_widget.value.strip()
+        }
+
+        if not self.validate_user_data(self.user_data):
+            with self.response_output:
+                clear_output()
+                print("Please fill in all fields correctly.")
+            return
+
+        # Update user history
+        self.update_user_history()
+
+        # Generate the workout routine
+        self.generate_workout_routine()
+
+    def generate_workout_routine(self):
+        # Construct the prompt for the OpenAI API
+        prompt = f'''
+        Give me a workout routine for following details.
+        My name is {self.user_data['name']}
+        My skill level is {self.user_data['level']} out of 10 in {self.user_data['sport']} sports.
+        My goal is following: {self.user_data['goals']}
+        Don't reply any word except the suggestions of max 10 lines.
+        Between each line insert \n
+        '''
+
+        # Call the OpenAI API
+        try:
+            chat_completion = self.client.chat.completions.create(
+                messages=[{"role": "user", "content": prompt}],
+                model="gpt-3.5-turbo"
+            )
+
+            # Display the API response
+            with self.response_output:
+                clear_output()
+                print(chat_completion.choices[0].message.content)
+
+        except Exception as e:
+            logging.error(f'Error while generating workout routine: {e}')
+            with self.response_output:
+                clear_output()
+                print("An error occurred while generating the workout routine.")
+
+    def on_save_button_clicked(self, user_data):
+        # Save user data to a file
+        try:
+            with open('workout_data.json', 'w') as f:
+                json.dump(user_data, f)
+            logging.info('User data saved successfully.')
+            print("Data saved successfully.")
+        except Exception as e:
+            logging.error(f'Error while saving data: {e}')
+            print("An error occurred while saving the data.")
+
+    def on_load_button_clicked(self, b):
+        # Load user data from a file
+        try:
+            with open('workout_data.json', 'r') as f:
+                self.user_data = json.load(f)
+            logging.info('User data loaded successfully.')
+            print("Data loaded successfully.")
+        except FileNotFoundError:
+            logging.warning('No saved data found.')
+            print("No saved data found.")
+        except Exception as e:
+            logging.error(f'Error while loading data: {e}')
+            print("An error occurred while loading the data.")
+
+    def update_user_history(self):
+        # Update user history with the latest entry
+        current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        self.user_history.append({'date': current_time, 'data': self.user_data.copy()})
+
+    def plot_user_activity(self):
+        # Plot the user's past activity if available
+        if self.user_history:
+            dates = [entry['date'] for entry in self.user_history]
+            skill_levels = [entry['data']['level'] for entry in self.user_history]
+
+            plt.figure(figsize=(10, 4))
+            plt.plot(dates, skill_levels, marker='o', linestyle='-')
+            plt.title('User Skill Level Over Time')
+            plt.xlabel('Date')
+            plt.ylabel('Skill Level')
+            plt.grid(True)
+            plt.show()
+        else:
+            print("No user history available for plotting.")
+
+# Create an instance of the WorkoutRoutineGenerator
+workout_generator = WorkoutRoutineGenerator()
+workout_generator.display_user_interface()  # Call the method on the created instance
